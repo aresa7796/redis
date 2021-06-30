@@ -4,7 +4,6 @@ import (
 	"errors"
 	"github.com/go-redis/redis/internal"
 	"github.com/go-redis/redis/internal/proto"
-	"log"
 	"net"
 	"sync"
 	"sync/atomic"
