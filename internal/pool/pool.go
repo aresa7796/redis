@@ -2,17 +2,18 @@ package pool
 
 import (
 	"errors"
+	"github.com/go-redis/redis/internal"
+	"github.com/go-redis/redis/internal/proto"
+	"log"
 	"net"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/go-redis/redis/internal"
 )
 
 var ErrClosed = errors.New("redis: client is closed")
 var ErrPoolTimeout = errors.New("redis: connection pool timeout")
-
+const PingTime = 5 * time.Second
 var timers = sync.Pool{
 	New: func() interface{} {
 		t := time.NewTimer(time.Hour)
@@ -460,11 +461,25 @@ func (p *ConnPool) reaper(frequency time.Duration) {
 }
 
 func (p *ConnPool) isStaleConn(cn *Conn) bool {
-	if p.opt.IdleTimeout == 0 && p.opt.MaxConnAge == 0 {
-		return false
-	}
-
+	//if p.opt.IdleTimeout == 0 && p.opt.MaxConnAge == 0 {
+	//	return false
+	//}
 	now := time.Now()
+	if now.Sub(cn.UsedAt()) >= PingTime {
+		err := cn.WithWriter(time.Second, func(wr *proto.Writer) error {
+			return wr.WriteArgs([]interface{}{"ping"})
+		})
+		if err != nil{
+			return true
+		}
+		err = cn.WithReader(time.Second, func(rd *proto.Reader) error {
+			_,err := rd.ReadString()
+			return err
+		})
+		if err != nil{
+			return true
+		}
+	}
 	if p.opt.IdleTimeout > 0 && now.Sub(cn.UsedAt()) >= p.opt.IdleTimeout {
 		return true
 	}
